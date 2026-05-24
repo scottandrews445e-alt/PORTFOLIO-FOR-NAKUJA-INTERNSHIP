@@ -1,0 +1,102 @@
+// Real-time Flight Control System
+
+#include <stdint.h>
+#include <stdbool.h>
+
+// Sensor reading structure
+typedef struct {
+    float altitude;
+    float velocity;
+    float acceleration;
+    uint32_t timestamp;
+} FlightData;
+
+// Flight states
+typedef enum {
+    IDLE,
+    POWERED_FLIGHT,
+    COASTING,
+    APOGEE,
+    RECOVERY
+} FlightState;
+
+class FlightComputer {
+private:
+    FlightState state;
+    FlightData current;
+    FlightData previous;
+    float max_altitude;
+    
+public:
+    FlightComputer() : state(IDLE), max_altitude(0.0f) {}
+    
+    void update(FlightData sensor_data) {
+        previous = current;
+        current = sensor_data;
+        
+        // Update maximum altitude
+        if (current.altitude > max_altitude) {
+            max_altitude = current.altitude;
+        }
+        
+        // State machine logic
+        update_state();
+        
+        // Execute control logic
+        execute_control();
+    }
+    
+    void update_state() {
+        switch (state) {
+            case IDLE:
+                if (current.acceleration > 5.0f) {
+                    state = POWERED_FLIGHT;
+                }
+                break;
+                
+            case POWERED_FLIGHT:
+                if (current.velocity < 0.5f) {
+                    state = COASTING;
+                }
+                break;
+                
+            case COASTING:
+                if (is_at_apogee()) {
+                    state = APOGEE;
+                    trigger_drogue();
+                }
+                break;
+                
+            case APOGEE:
+                if (current.altitude < 500.0f) {
+                    state = RECOVERY;
+                    trigger_main_chute();
+                }
+                break;
+                
+            case RECOVERY:
+                break;
+        }
+    }
+    
+    bool is_at_apogee() {
+        return (current.velocity < 0.5f) && 
+               (previous.altitude > current.altitude);
+    }
+    
+    void execute_control() {
+        // Control logic based on state
+    }
+    
+    void trigger_drogue() {
+        // Deploy drogue parachute
+    }
+    
+    void trigger_main_chute() {
+        // Deploy main parachute
+    }
+    
+    float get_max_altitude() const {
+        return max_altitude;
+    }
+};
