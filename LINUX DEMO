@@ -1,0 +1,77 @@
+#!/bin/bash
+# Rocket Telemetry Monitoring System
+# Demonstrates my knowledge in: Bash scripting, system monitoring, log management
+
+set -e
+
+TELEMETRY_DIR="/var/log/rocket_telemetry"
+DATA_FILE="$TELEMETRY_DIR/flight_data.csv"
+BACKUP_DIR="$TELEMETRY_DIR/backups"
+MAX_LOG_SIZE=104857600 # 100MB
+
+# Initialize
+setup_environment() {
+    mkdir -p "$TELEMETRY_DIR" "$BACKUP_DIR"
+    
+    if [ ! -f "$DATA_FILE" ]; then
+        echo "timestamp,pressure,altitude,temperature" > "$DATA_FILE"
+    fi
+}
+
+# Monitor serial port and log data
+monitor_telemetry() {
+    local port=$1
+    local baud=$2
+    
+    echo "[$(date)] Starting telemetry monitor on $port"
+    
+    stdbuf -oL cat "$port" | while read line; do
+        if [[ ! -z "$line" ]]; then
+            timestamp=$(date '+%s%3N')
+            echo "$timestamp,$line" >> "$DATA_FILE"
+            
+            # Check log file size
+            check_log_rotation
+        fi
+    done
+}
+
+# Rotate logs when size exceeds limit
+check_log_rotation() {
+    local size=$(stat -f%z "$DATA_FILE" 2>/dev/null || stat -c%s "$DATA_FILE")
+    
+    if [ "$size" -gt "$MAX_LOG_SIZE" ]; then
+        backup_file="$BACKUP_DIR/flight_data_$(date +%Y%m%d_%H%M%S).csv"
+        mv "$DATA_FILE" "$backup_file"
+        gzip "$backup_file"
+        echo "timestamp,pressure,altitude,temperature" > "$DATA_FILE"
+        echo "[$(date)] Log rotated: $backup_file"
+    fi
+}
+
+# Generate real-time statistics
+show_stats() {
+    if [ -f "$DATA_FILE" ]; then
+        echo "=== Telemetry Statistics ==="
+        tail -20 "$DATA_FILE" | awk -F',' '{
+            alt += $3; count++
+        }
+        END {
+            print "Average altitude (last 20): " alt/count " m"
+        }'
+    fi
+}
+
+# Main execution
+main() {
+    setup_environment
+    
+    if [ $# -lt 2 ]; then
+        echo "Usage: $0 <serial_port> <baud_rate>"
+        exit 1
+    fi
+    
+    monitor_telemetry "$1" "$2"
+}
+
+main "$@"
